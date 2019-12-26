@@ -7,34 +7,47 @@ import io.dvlopt.linux.epoll.EpollEvent;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.annotation.Bean;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.SynchronousQueue;
+import java.util.Queue;
+import java.util.concurrent.*;
 
-
+@Component
 public class MyEpollFlux<T> implements Publisher<T>, Runnable {
 
-    private ExecutorService executor= Executors.newSingleThreadExecutor();
-    Future ioLoopFuture;
+    @Autowired
+    private ApplicationContext applicationContext;
+
+    @Autowired
+    private TaskExecutor executor;
+
     String fifoPath;
     Epoll poller;
-    SynchronousQueue<T> queue;
+    Queue<T> queue;
+    Logger logger = LoggerFactory.getLogger(MyEpollFlux.class);
     boolean finished = false;
 
-    MyEpollFlux(String fifoPath) {
-        System.out.println("RISHIN: In constructor ...");
+    MyEpollFlux() {
+        logger.info("RISHIN: In MyEpollFlux constructor ...");
+        this.fifoPath = "/tmp/rishinfifo";
         try {
-            this.fifoPath = fifoPath;
             this.poller = new Epoll();
-            this.queue = new SynchronousQueue();
+            this.queue = new ConcurrentLinkedQueue<>();
         } catch (IOException e) {
-            e.printStackTrace();
+            logger.error(e.getMessage());
         }
-        this.ioLoopFuture = executor.submit(this);
+    }
+
+    @Bean
+    void startPublisher() {
+        executor.execute(this);
     }
 
     synchronized boolean isRunning() {
@@ -52,7 +65,7 @@ public class MyEpollFlux<T> implements Publisher<T>, Runnable {
     @Override
     public void run() {
 
-        try (NativeIo io = new NativeIo(this.fifoPath)) {
+        try (NativeIo io = new NativeIo(this.fifoPath, NativeIo.O_RDONLY)) {
             int fd = io.getFd();
 
             EpollEvent.Flags toMonitorFlags = new EpollEvent.Flags();
@@ -69,12 +82,16 @@ public class MyEpollFlux<T> implements Publisher<T>, Runnable {
                 EpollEvent incomingEvent = new EpollEvent();
                 poller.wait(incomingEvent);
                 if (incomingEvent.getFlags().isSet(EpollEvent.Flag.EPOLLIN)) {
-                    this.queue.offer((T)io.read()); // TODO: typecast fix
+                    String readItem = io.read();
+                    // TODO: return value check
+                    this.queue.offer((T)readItem); // TODO: typecast fix
+                    logger.info("Readitem: " + readItem + " queue_size=" + this.queue.size());
                 } else {
                     this.setFinished();
                 }
             }
         } catch (IOException e) {
+            logger.error(e.getMessage());
             this.setFinished();
         }
     }
@@ -105,7 +122,16 @@ class MyEpollSubscription<T> implements Subscription {
             if (!this.upstream.isRunning()) {
                 break;
             }
-            downstream.onNext(this.upstream.getItem());
+            T item = this.upstream.getItem();
+            while (item == null) {
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    downstream.onError(e);
+                }
+                item = this.upstream.getItem();
+            }
+            downstream.onNext(item);
         }
 
         if (!this.upstream.isRunning()) {

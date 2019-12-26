@@ -18,7 +18,7 @@ public class NativeIo implements AutoCloseable {
         Native.register( "c" );
     }
 
-    private native int open(Pointer pathName);
+    private native int open(Pointer pathName, int flags, int mode);
     private native void close(int fd);
     private native long read(int fd, Pointer buf, long count);
 
@@ -26,12 +26,12 @@ public class NativeIo implements AutoCloseable {
     private static final String ENCODING = "utf8"; // TODO: How to mach java encoded sting to c runtime string encoding?
     private int fd;
 
-    public NativeIo(String pathName) throws IOException {
+    public NativeIo(String pathName, int mode) throws IOException {
         // String to native
         Pointer mem = new Memory(pathName.length() + 1);
         mem .setString(0, pathName, ENCODING);
         // Call native open
-        fd = open(mem);
+        fd = open(mem, 0, mode);
         if (fd < 0) {
             int errno = Native.getLastError();
             throw new IOException("Native call 'open' failed. errno=0x" + Integer.toHexString(errno));

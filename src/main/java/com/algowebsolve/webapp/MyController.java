@@ -26,7 +26,9 @@ public class MyController {
     }};
 
     // TODO: Is this a singleton?
-    MyEpollFlux<String> myFlux = new MyEpollFlux<>("/tmp/rishinfifo");
+    @Autowired
+    MyEpollFlux<String> myFlux;
+
 
     @Autowired
     private MyFormatterService formatterService;
@@ -65,7 +67,6 @@ public class MyController {
     }
 
     // MYFLUX
-
     @GetMapping(value="/myflux/live", produces="text/event-stream")
     public Flux<String> jediLive() {
         return Flux.from(myFlux);
@@ -76,7 +77,7 @@ public class MyController {
     public ResponseEntity<String> myjna(@RequestParam(value="filename") String name) {
         logger.info("Param to myjna:" + name);
         String content = null;
-        try (NativeIo io = new NativeIo(name)) {
+        try (NativeIo io = new NativeIo(name, NativeIo.O_RDONLY)) {
             content = io.read();
         } catch (IOException e) {
             logger.error(e.toString());
