@@ -4,11 +4,11 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
 
-public class ConcurrentMap<K, V> implements Map<K, V> {
+public class TheadSafeMap<K, V> implements Map<K, V> {
 
     Map<K, V> map = null;
 
-    ConcurrentMap(Map<K, V> map) {
+    TheadSafeMap(Map<K, V> map) {
         this.map = map;
     }
 
