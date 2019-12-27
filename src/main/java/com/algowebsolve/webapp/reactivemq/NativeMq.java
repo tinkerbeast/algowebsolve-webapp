@@ -25,6 +25,7 @@ public class NativeMq implements AutoCloseable {
     private static final int MSG_LEN_MAX = 8192+1; // TODO: took arbitrary value, need to fetch from system limits
                                                 //        /proc/sys/fs/mqueue/msgsize_max
                                                  // TODO: Allow attr modification for message len
+    public static final int MSG_PRIORITY_DEFAULT = 0;
 
     private int mqdes = -1;
     private Pointer recvPrio = Pointer.NULL; // WARNING: This field value is note thread-safe
@@ -33,6 +34,7 @@ public class NativeMq implements AutoCloseable {
 
     public NativeMq(String queueName, int flags) throws IOException {
         // allocate memory for recv prio
+        queueName = "/" + queueName;
         this.recvPrio = new Memory(16); // TODO: 16 bytes is arbitrarily taken, ideally should be sizeof(native int)
         this.sendBuffer = new Memory(MSG_LEN_MAX);
         this.recvBuffer = new Memory(MSG_LEN_MAX);
@@ -89,5 +91,9 @@ public class NativeMq implements AutoCloseable {
             int errno = Native.getLastError();
             throw new IOException("Native call 'mq_close' failed. errno=" + errno);
         }
+    }
+
+    int getFd() {
+        return this.mqdes;
     }
 }
