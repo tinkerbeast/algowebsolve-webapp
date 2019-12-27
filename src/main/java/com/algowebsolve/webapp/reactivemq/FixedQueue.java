@@ -36,7 +36,7 @@ public class FixedQueue<E> implements Queue<E> {
 
     @Override
     public Object[] toArray() {
-        return new this.queue.toArray();
+        return this.queue.toArray();
     }
 
     @Override
@@ -55,9 +55,11 @@ public class FixedQueue<E> implements Queue<E> {
 
     @Override
     public boolean addAll(Collection<? extends E> collection) {
+        boolean added = true;
         for (E item: collection) {
-            this.add(item);
+            added = this.add(item) && added;
         }
+        return added;
     }
 
     @Override

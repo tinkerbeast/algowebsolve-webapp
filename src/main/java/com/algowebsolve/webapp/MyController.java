@@ -1,11 +1,15 @@
 package com.algowebsolve.webapp;
 
 import java.io.IOException;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
+import com.algowebsolve.webapp.reactivemq.NativeMq;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.slf4j.Logger;
@@ -70,6 +74,21 @@ public class MyController {
     @GetMapping(value="/myflux/live", produces="text/event-stream")
     public Flux<String> jediLive() {
         return Flux.from(myFlux);
+    }
+
+    @GetMapping("/echo/nativemq")
+    public ResponseEntity<String> echoMq(@RequestParam(value="mq") String mq, @RequestParam(value="msg") String msg) {
+        try (NativeMq nativeMq = new NativeMq(mq, NativeIo.O_RDWR)) {
+            logger.info("IN: " + msg);
+            byte[] inData = msg.getBytes(StandardCharsets.UTF_8);
+            nativeMq.send(inData, 1);
+            byte[] outData = nativeMq.recv();
+            String out = new String(outData, StandardCharsets.UTF_8);
+            logger.info("OUT: " + out);
+            return ResponseEntity.ok(out);
+        } catch (IOException e ) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(e.getMessage()); // TODO: dangerous exposing internat error to external
+        }
     }
 
     // JNA

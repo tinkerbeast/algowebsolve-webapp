@@ -49,7 +49,7 @@ public class ConcurrentMap<K, V> implements Map<K, V> {
 
     @Override
     public synchronized void putAll(Map<? extends K, ? extends V> map) {
-        this.map.putAll();
+        this.map.putAll(map);
     }
 
     @Override
