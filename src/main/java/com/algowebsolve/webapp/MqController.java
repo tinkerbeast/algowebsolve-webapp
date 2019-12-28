@@ -1,10 +1,7 @@
 package com.algowebsolve.webapp;
 
-import com.algowebsolve.webapp.reactivemq.MqIoLoop;
+import com.algowebsolve.webapp.reactivemq.*;
 
-import com.algowebsolve.webapp.reactivemq.MqPacket;
-import com.algowebsolve.webapp.reactivemq.MqPacketIdFactory;
-import com.algowebsolve.webapp.reactivemq.NativeMq;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -12,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -21,37 +19,46 @@ import java.nio.charset.StandardCharsets;
 public class MqController {
 
     @Autowired
-    MqIoLoop mqIoLoop;
+    MqReaderIoLoop reader;
 
-    @Autowired
-    MqPacketIdFactory packetIdFactory;
+    //@Autowired
+    //MqWriterIoLoop writer;
 
     private static final ObjectMapper mapper = new ObjectMapper();
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(MqController.class);
 
-    @PostMapping("/readermq/{mqname}")
-    public ResponseEntity<Void> createReaderMq(@PathVariable String mqname) {
+    private void sendDumyyPacket(NativeMq mq, String msg) throws IOException {
+        // TODO: is there shorter code to do this?
+        MqPacket packet = new MqPacket();
+        packet.setId(-1L);
+        packet.setData(msg.getBytes(StandardCharsets.UTF_8));
+        // send the data
+        byte[] data = mapper.writeValueAsBytes(packet);
+        mq.send(data, NativeMq.MSG_PRIORITY_DEFAULT);
+    }
+
+    @PostMapping("/mq/reader/{mqname}")
+    public ResponseEntity<Void> createReaderMq(@PathVariable String mqname, @RequestParam(value="msg", required=false) String msg) {
         try {
-            mqIoLoop.getOrCreateMq(mqname);
+            NativeMq mq = reader.getOrCreateMq(mqname);
+            if (msg != null) {
+                sendDumyyPacket(mq, msg);
+            }
             return ResponseEntity.noContent().build();
         } catch (IOException e) {
             log.info("Failed to create or get native mq, mq=" + mqname, e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            return ResponseEntity.notFound().build();
         }
     }
 
-    @PutMapping("/readermq/{mqname}")
+    @PutMapping("/mq/reader/{mqname}")
     public ResponseEntity<Void> sendReaderMsg(@PathVariable String mqname, @RequestParam(value="msg") String msg) {
         try {
-            NativeMq mq = mqIoLoop.getOrCreateMq(mqname);
-            // TODO: is there shorter code to do this?
-            MqPacket packet = new MqPacket();
-            packet.setId(packetIdFactory.produceId());
-            packet.setData(msg.getBytes(StandardCharsets.UTF_8));
-            // TODO: so many levels of conversion cant be good. Use sendfile?
-            //
-            byte[] data = mapper.writeValueAsBytes(packet);
-            mq.send(data, NativeMq.MSG_PRIORITY_DEFAULT);
+            NativeMq mq = reader.getMq(mqname);
+            if (mq == null) {
+                return ResponseEntity.notFound().build();
+            }
+            sendDumyyPacket(mq, msg);
             return ResponseEntity.noContent().build();
         } catch (IOException e) {
             log.info("Failed to do send operations on native mq, mq=" + mqname, e);
@@ -59,13 +66,12 @@ public class MqController {
         }
     }
 
-    @GetMapping("/readermq/{mqname}")
+    @GetMapping(value="/mq/reader/{mqname}/live", produces="text/event-stream")
     public Flux<String> recvReaderMsg(@PathVariable String mqname) {
-        WebClient webClient = null;
-        webClient.post().uri("").exchange().fl
-        return Flux.fromStream(mqIoLoop.stream()
+        return Flux.fromStream(reader.stream()
                 .map((byteArr) -> {
                     return new String(byteArr, StandardCharsets.UTF_8);
                 }));
     }
+
 }

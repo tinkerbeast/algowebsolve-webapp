@@ -1,5 +1,18 @@
 package com.algowebsolve.webapp.reactivemq;
 
+import com.algowebsolve.webapp.NativeIo;
+import com.fasterxml.jackson.core.JsonParseException;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sun.jna.Native;
+import io.dvlopt.linux.epoll.Epoll;
+import io.dvlopt.linux.epoll.EpollEvent;
+import io.dvlopt.linux.epoll.EpollEvents;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Bean;
+import org.springframework.core.task.TaskExecutor;
+import org.springframework.stereotype.Service;
+
 import java.io.IOException;
 import java.util.Collections;
 import java.util.Map;
@@ -7,36 +20,29 @@ import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
-import com.algowebsolve.webapp.NativeIo;
-import com.sun.jna.Native;
-import com.fasterxml.jackson.core.JsonParseException;
-import com.fasterxml.jackson.databind.JsonMappingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import io.dvlopt.linux.epoll.Epoll;
-import io.dvlopt.linux.epoll.EpollEvent;
-import io.dvlopt.linux.epoll.EpollEvents;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.core.task.TaskExecutor;
-
-
+@Service
 public class MqReaderIoLoop implements MqIoLoopable {
 
-    private static final ObjectMapper mapper = new ObjectMapper();
+    @Autowired
+    private TaskExecutor executor;
 
-    private Logger logger = LoggerFactory.getLogger(MqReaderIoLoop.class);
+    private static final ObjectMapper mapper = new ObjectMapper();
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(MqReaderIoLoop.class);
 
     private Map<String, NativeMq> mqMap = null;
     private Map<Integer, NativeMq> fdMap = null;
     private Map<Long, byte[]> recvQ = null;
     private Epoll poller = null;
     private String defaultMq = null;
-    private TaskExecutor executor = null;
     private int millis = -1;
     private int batchSize = -1;
     private int stock = -1;
 
-    public MqReaderIoLoop(int millisLatency, int batchSize, int stock, String defaultMq, TaskExecutor executor) throws IOException {
+    public MqReaderIoLoop() throws IOException {
+        this(10, 3, 10240, "rishin_in");
+    }
+
+    public MqReaderIoLoop(int millisLatency, int batchSize, int stock, String defaultMq) throws IOException {
         //this.millis = 10; // latency in terms ioloop blocking
         //this.batchSize = 3; // maximum messages wait for ioloop
         //this.stock = 10240; // store upto 10240 responses before they are deleted
@@ -47,20 +53,30 @@ public class MqReaderIoLoop implements MqIoLoopable {
         this.fdMap = new ConcurrentHashMap<>();
         this.recvQ = Collections.synchronizedMap(new FixedMap<>(new TreeMap<>(), this.stock));
         this.poller = new Epoll();
-        this.executor = executor;
 
         this.defaultMq = defaultMq;
         this.getOrCreateMq(defaultMq);
     }
 
+    @Bean(name = "MqReaderIoLoop.start")
     @Override
     public void start() {
-        this.executor.execute(this);
+        executor.execute(this);
     }
 
     @Override
     public Stream<byte[]> stream() {
         return this.recvQ.values().stream();
+    }
+
+    @Override
+    public long postJob(String mqName, byte[] data) {
+        throw new UnsupportedOperationException("Reader does not support post");
+    }
+
+    @Override
+    public byte[] getJob(long id) {
+        return this.recvQ.remove(id);
     }
 
     @Override
@@ -72,9 +88,14 @@ public class MqReaderIoLoop implements MqIoLoopable {
             this.mqMap.put(mqName, mq);
             this.fdMap.put(mq.getFd(), mq);
             this.monitorMq(mq);
-            logger.info(String.format("Started monitoring new queue, queue=%s fd=%d instance=%s", mqName, mq.getFd(), mq));
+            log.info(String.format("Reader started monitoring new queue, queue=%s fd=%d instance=%s", mqName, mq.getFd(), mq));
         }
         return mq;
+    }
+
+    @Override
+    public NativeMq getMq(String mqName) {
+        return this.mqMap.get(mqName);
     }
 
     private void monitorMq(NativeMq mq) throws IOException {
@@ -99,17 +120,17 @@ public class MqReaderIoLoop implements MqIoLoopable {
             try {
                 numEvents = poller.wait(incomingEvents, millis);
             } catch (IOException e) {
-                logger.error("IO error on poller wait", e);
+                log.error("IO error on poller wait", e);
             }
             // exit if interrupted
             if (Thread.interrupted()) {
-                logger.info("Service stopping");
+                log.info("Service stopping");
                 break;
             }
             // check if epoll returned a valid state
             if (numEvents < 0) {
                 int errno = Native.getLastError();
-                logger.error("Native call 'epoll_wait' failed, errno=" + errno);
+                log.error("Native call 'epoll_wait' failed, errno=" + errno);
                 continue;
             }
             // process events
@@ -117,7 +138,7 @@ public class MqReaderIoLoop implements MqIoLoopable {
                 EpollEvent event = incomingEvents.getEpollEvent(i);
                 if (event.getFlags().isSet(EpollEvent.Flag.EPOLLIN)) {
                     long userData = event.getUserData(); // TODO: hate casting (even when ok)
-                    logger.info("userData=" + userData); // TODO ERROR in underlying lib - Why is is this zero?
+                    //log.info("userData=" + userData); // TODO ERROR in underlying lib - Why is is this zero?
                     try {
                         // TODO: HORRIBLE HORRIBLE HORRIBLE HORRIBLE HORRIBLE HORRIBLE HORRIBLE HORRIBLE HORRIBLE HORRIBLE HORRIBLE
                         // TODO: MUSTFIX MUSTFIX MUSTFIX MUSTFIX MUSTFIX MUSTFIX MUSTFIX MUSTFIX MUSTFIX MUSTFIX MUSTFIX MUSTFIX MUSTFIX
@@ -127,13 +148,13 @@ public class MqReaderIoLoop implements MqIoLoopable {
                         MqPacket packet = mapper.readValue(data, MqPacket.class);
                         recvQ.put(packet.id, packet.data);
                     } catch (JsonParseException | JsonMappingException e) {
-                        logger.error("Failed to deserialise packet", e);
+                        log.error("Failed to deserialise packet", e);
                     } catch (IOException e) {
-                        logger.error("Message queue receive had IO error", e);
+                        log.error("Message queue receive had IO error", e);
                     }
                 } else {
                     // TODO: handle all events
-                    logger.error("TODO: Could not handle event event=" + event.getFlags());
+                    log.error("TODO: Could not handle event event=" + event.getFlags());
                 }
             }
         }

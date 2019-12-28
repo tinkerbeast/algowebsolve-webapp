@@ -8,38 +8,42 @@ import com.sun.jna.Native;
 import io.dvlopt.linux.epoll.Epoll;
 import io.dvlopt.linux.epoll.EpollEvent;
 import io.dvlopt.linux.epoll.EpollEvents;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Bean;
 import org.springframework.core.task.TaskExecutor;
+import org.springframework.stereotype.Service;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
-
+//@Service
 public class MqWriterIoLoop implements MqIoLoopable {
 
     @Autowired
     MqPacketIdFactory packetIdFactory;
 
-    private static final ObjectMapper mapper = new ObjectMapper();
+    @Autowired
+    private TaskExecutor executor;
 
-    private Logger logger = LoggerFactory.getLogger(MqWriterIoLoop.class);
+    private static final ObjectMapper mapper = new ObjectMapper();
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(MqWriterIoLoop.class);
 
     private Map<String, NativeMq> mqMap = null;
     private Map<Integer, NativeMq> fdMap = null;
     private Map<String, Queue<MqPacket>> sendQ = null;
     private Epoll poller = null;
     private String defaultMq = null;
-    private TaskExecutor executor = null;
     private int millis = -1;
     private int batchSize = -1;
     private int stock = -1;
 
-    public MqWriterIoLoop(int millisLatency, int batchSize, int stock, String defaultMq, TaskExecutor executor) throws IOException {
+    public MqWriterIoLoop() throws IOException {
+        this(10, 1, 100, "rishin_out");
+    }
+
+    public MqWriterIoLoop(int millisLatency, int batchSize, int stock, String defaultMq) throws IOException {
         //this.millis = 10; // latency in terms ioloop blocking
         //this.batchSize = 3; // maximum messages wait for ioloop
         //this.stock = 10240; // store upto 10240 responses before they are deleted
@@ -50,15 +54,15 @@ public class MqWriterIoLoop implements MqIoLoopable {
         this.fdMap = new ConcurrentHashMap<>();
         this.sendQ = new ConcurrentHashMap<>();
         this.poller = new Epoll();
-        this.executor = executor;
 
         this.defaultMq = defaultMq;
         this.getOrCreateMq(defaultMq);
     }
 
+    @Bean(name = "MqWriterIoLoop.start")
     @Override
     public void start() {
-        this.executor.execute(this);
+        executor.execute(this);
     }
 
     @Override
@@ -66,12 +70,13 @@ public class MqWriterIoLoop implements MqIoLoopable {
         throw new UnsupportedOperationException("MqWriterIoLoop does not support stream api");
     }
 
-    long post(String mqName, byte[] data) {
+    @Override
+    public long postJob(String mqName, byte[] data) {
         // create a packet around the data
         long jobId = packetIdFactory.produceId();
         MqPacket packet = new MqPacket();
         packet.setId(jobId);
-        packet.setData(data));
+        packet.setData(data);
         // add the packet to processing queue
         Queue<MqPacket> inQueue = this.sendQ.get(mqName);
         synchronized (inQueue) { // TODO: RISHIN_A1: Used synchronised here since I dind't make the queue synchronous
@@ -81,18 +86,28 @@ public class MqWriterIoLoop implements MqIoLoopable {
     }
 
     @Override
+    public byte[] getJob(long id) {
+        throw new UnsupportedOperationException("Writer does not support get");
+    }
+
+    @Override
     public NativeMq getOrCreateMq(String mqName) throws IOException {
         NativeMq mq = null;
         mq = this.mqMap.get(mqName);
         if (mq == null) {
-            mq = new NativeMq(mqName, NativeIo.O_WRONLY);
+            mq = new NativeMq(mqName, NativeIo.O_RDWR);
             this.mqMap.put(mqName, mq);
             this.fdMap.put(mq.getFd(), mq);
             this.sendQ.put(mqName, new FixedQueue<>(new LinkedList<>(), this.batchSize)); // TODO: Synchronisation is must for the queue See RISHIN_A1 marker
             this.monitorMq(mq);
-            logger.info(String.format("Started monitoring new queue, queue=%s fd=%d instance=%s", mqName, mq.getFd(), mq));
+            log.info(String.format("Writer started monitoring new queue, queue=%s fd=%d instance=%s", mqName, mq.getFd(), mq));
         }
         return mq;
+    }
+
+    @Override
+    public NativeMq getMq(String mqName) {
+        return this.mqMap.get(mqName);
     }
 
     private void monitorMq(NativeMq mq) throws IOException {
@@ -117,17 +132,17 @@ public class MqWriterIoLoop implements MqIoLoopable {
             try {
                 numEvents = poller.wait(incomingEvents, millis);
             } catch (IOException e) {
-                logger.error("IO error on poller wait", e);
+                log.error("IO error on poller wait", e);
             }
             // exit if interrupted
             if (Thread.interrupted()) {
-                logger.info("Service stopping");
+                log.info("Service stopping");
                 break;
             }
             // check if epoll returned a valid state
             if (numEvents < 0) {
                 int errno = Native.getLastError();
-                logger.error("Native call 'epoll_wait' failed, errno=" + errno);
+                log.error("Native call 'epoll_wait' failed, errno=" + errno);
                 continue;
             }
             // process events
@@ -135,22 +150,26 @@ public class MqWriterIoLoop implements MqIoLoopable {
                 EpollEvent event = incomingEvents.getEpollEvent(i);
                 if (event.getFlags().isSet(EpollEvent.Flag.EPOLLOUT)) {
                     long userData = event.getUserData(); // TODO: hate casting (even when ok)
-                    logger.info("userData=" + userData); // TODO ERROR in underlying lib - Why is is this zero?
+                    log.info("userData=" + userData); // TODO ERROR in underlying lib - Why is is this zero?
                     try {
                         // TODO: HORRIBLE HORRIBLE HORRIBLE HORRIBLE HORRIBLE HORRIBLE HORRIBLE HORRIBLE HORRIBLE HORRIBLE HORRIBLE
                         // TODO: MUSTFIX MUSTFIX MUSTFIX MUSTFIX MUSTFIX MUSTFIX MUSTFIX MUSTFIX MUSTFIX MUSTFIX MUSTFIX MUSTFIX MUSTFIX
                         // TODO: Only working since we're listening on one queue
-                        MqPacket packet = this.sendQ.get(this.defaultMq).remove();
-                        byte[] data = mapper.writeValueAsBytes(packet);
-                        mqMap.get(this.defaultMq).send(data, NativeMq.MSG_PRIORITY_DEFAULT);
+                        MqPacket packet = this.sendQ.get(this.defaultMq).poll();
+                        if (packet != null) {
+                            byte[] data = mapper.writeValueAsBytes(packet);
+                            mqMap.get(this.defaultMq).send(data, NativeMq.MSG_PRIORITY_DEFAULT);
+                        } else {
+                            // no pending jobs, nothing to do
+                        }
                     } catch (JsonParseException | JsonMappingException e) {
-                        logger.error("Failed to deserialise packet", e);
+                        log.error("Failed to deserialise packet", e);
                     } catch (IOException e) {
-                        logger.error("Message queue receive had IO error", e);
+                        log.error("Message queue receive had IO error", e);
                     }
                 } else {
                     // TODO: handle all events
-                    logger.error("TODO: Could not handle event event=" + event.getFlags());
+                    log.error("TODO: Could not handle event event=" + event.getFlags());
                 }
             }
         }
