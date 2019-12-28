@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Semaphore;
 import java.util.stream.Stream;
 
 //@Service
@@ -35,6 +36,7 @@ public class MqWriterIoLoop implements MqIoLoopable {
     private Map<String, Queue<MqPacket>> sendQ = null;
     private Epoll poller = null;
     private String defaultMq = null;
+    private Semaphore mutex = null;
     private int millis = -1;
     private int batchSize = -1;
     private int stock = -1;
@@ -54,6 +56,7 @@ public class MqWriterIoLoop implements MqIoLoopable {
         this.fdMap = new ConcurrentHashMap<>();
         this.sendQ = new ConcurrentHashMap<>();
         this.poller = new Epoll();
+        this.mutex = new Semaphore(1);
 
         this.defaultMq = defaultMq;
         this.getOrCreateMq(defaultMq);
@@ -82,6 +85,8 @@ public class MqWriterIoLoop implements MqIoLoopable {
         synchronized (inQueue) { // TODO: RISHIN_A1: Used synchronised here since I dind't make the queue synchronous
             inQueue.add(packet);
         }
+        
+        this.mutex.release();
         return jobId;
     }
 
@@ -126,6 +131,16 @@ public class MqWriterIoLoop implements MqIoLoopable {
     public void run() {
 
         while (true) {
+            // wait on mesages to be added
+            // TODO: ERROR ERROR ERROR ERROR ERROR ERROR ERROR ERROR ERROR ERROR ERROR ERROR ERROR ERROR ERROR ERROR ERROR
+            // TODO: Assuming a whole buch of messages were added while we were processing (code after this), we will acquire only once.
+            //      Subsequently we will hang up, since processing is being done on one message
+            try {
+                this.mutex.acquire();
+            } catch (InterruptedException e) {
+                log.info("Service stopping");
+                break;
+            }
             // create epoll events storage and wait for events
             EpollEvents incomingEvents = new EpollEvents(batchSize);
             int numEvents = 0;

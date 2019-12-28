@@ -19,7 +19,7 @@ import java.io.IOException;
 import java.util.Queue;
 import java.util.concurrent.*;
 
-@Component
+
 public class MyEpollFlux<T> implements Publisher<T>, Runnable {
 
     @Autowired

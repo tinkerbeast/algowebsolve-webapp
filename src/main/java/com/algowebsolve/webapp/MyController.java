@@ -18,7 +18,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 
-@RestController
+
 public class MyController {
 
     private static final String HELLO_FORMAT = "Hello %s (%d)";
@@ -84,7 +84,7 @@ public class MyController {
             nativeMq.send(inData, 1);
             byte[] outData = nativeMq.recv();
             String out = new String(outData, StandardCharsets.UTF_8);
-            logger.info("OUT: " + out);
+            logger.info("OUT: " + msg);
             return ResponseEntity.ok(out);
         } catch (IOException e ) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(e.getMessage()); // TODO: dangerous exposing internat error to external
