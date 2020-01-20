@@ -15,7 +15,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 
-@RestController
+
 public class MqController {
 
     @Autowired

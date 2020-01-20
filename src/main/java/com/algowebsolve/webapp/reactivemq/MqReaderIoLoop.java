@@ -20,7 +20,7 @@ import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
-@Service
+//@Service
 public class MqReaderIoLoop implements MqIoLoopable {
 
     @Autowired

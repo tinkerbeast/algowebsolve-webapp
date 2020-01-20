@@ -1,11 +1,13 @@
 package com.algowebsolve.webapp;
 
 import java.io.IOException;
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Random;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import com.algowebsolve.webapp.reactivemq.NativeMq;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,20 +20,20 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 
-
-public class MyController {
+@RestController
+public class MyControllerBasic {
 
     private static final String HELLO_FORMAT = "Hello %s (%d)";
     private final AtomicLong counter = new AtomicLong(); // RISHIN: This is inited once for the entire lifetime
-    Logger logger = LoggerFactory.getLogger(MyController.class);
+    Logger logger = LoggerFactory.getLogger(MyControllerBasic.class);
     Map<Integer, MyJediModel> jediMap  = new HashMap<>() {{
         put(1, new MyJediModel("Luke"));
         put(2, new MyJediModel("Yoda"));
     }};
 
     // TODO: Is this a singleton?
-    @Autowired
-    MyEpollFlux<String> myFlux;
+    //@Autowired
+    //MyEpollFlux<String> myFlux;
 
 
     @Autowired
@@ -52,12 +54,10 @@ public class MyController {
     }
 
     // FLUX RELATED
-
     @GetMapping("/jedi")
     public Flux<MyJediModel> jedi() {
         return Flux.fromIterable(jediMap.values());
     }
-
     @GetMapping("/jedi/{id}")
     public Mono<MyJediModel> jediById(@PathVariable Integer id) {
         return Mono.justOrEmpty(jediMap.get(id));
@@ -71,10 +71,10 @@ public class MyController {
     }
 
     // MYFLUX
-    @GetMapping(value="/myflux/live", produces="text/event-stream")
-    public Flux<String> jediLive() {
-        return Flux.from(myFlux);
-    }
+    //@GetMapping(value="/myflux/live", produces="text/event-stream")
+    //public Flux<String> jediLive() {
+    //    return Flux.from(myFlux);
+    //}
 
     @GetMapping("/echo/nativemq")
     public ResponseEntity<String> echoMq(@RequestParam(value="mq") String mq, @RequestParam(value="msg") String msg) {
