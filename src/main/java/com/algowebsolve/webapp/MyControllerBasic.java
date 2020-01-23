@@ -4,12 +4,12 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Random;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.IntStream;
-import java.util.stream.Stream;
 
-import com.algowebsolve.webapp.reactivemq.NativeMq;
+import com.algowebsolve.webapp.nsystem.linux.NativeIo;
+import com.algowebsolve.webapp.nsystem.linux.MqIo;
+import com.algowebsolve.webapp.MyJediModel;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -26,10 +26,11 @@ public class MyControllerBasic {
     private static final String HELLO_FORMAT = "Hello %s (%d)";
     private final AtomicLong counter = new AtomicLong(); // RISHIN: This is inited once for the entire lifetime
     Logger logger = LoggerFactory.getLogger(MyControllerBasic.class);
-    Map<Integer, MyJediModel> jediMap  = new HashMap<>() {{
-        put(1, new MyJediModel("Luke"));
-        put(2, new MyJediModel("Yoda"));
-    }};
+    static Map<Integer, MyJediModel> jediMap  = new HashMap<>();
+    static {
+        jediMap.put(1, new MyJediModel("Luke"));
+        jediMap.put(2, new MyJediModel("Yoda"));
+    };
 
     // TODO: Is this a singleton?
     //@Autowired
@@ -78,7 +79,7 @@ public class MyControllerBasic {
 
     @GetMapping("/echo/nativemq")
     public ResponseEntity<String> echoMq(@RequestParam(value="mq") String mq, @RequestParam(value="msg") String msg) {
-        try (NativeMq nativeMq = new NativeMq(mq, NativeIo.O_RDWR)) {
+        try (MqIo nativeMq = new MqIo(mq, NativeIo.O_RDWR)) {
             logger.info("IN: " + msg);
             byte[] inData = msg.getBytes(StandardCharsets.UTF_8);
             nativeMq.send(inData, 1);
@@ -107,5 +108,14 @@ public class MyControllerBasic {
         } else {
             return null;
         }
+
+
     }
+
+    // RestTemplate, WebClient, HttpURLConnection, WebRequest
+    // GET,HEAD, DELETE           - Header only (convention)
+    //                  PUT, POST - With body (convention)
+    // GET,HEAD                   - Idempotent + State invariant
+    //           DELETE,PUT       - Idempotent + State mutate
+    //                       POST - Non-idempotent + State mutate
 }

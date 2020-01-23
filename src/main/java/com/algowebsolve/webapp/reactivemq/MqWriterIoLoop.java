@@ -1,6 +1,7 @@
 package com.algowebsolve.webapp.reactivemq;
 
-import com.algowebsolve.webapp.NativeIo;
+import com.algowebsolve.webapp.nsystem.linux.MqIo;
+import com.algowebsolve.webapp.nsystem.linux.NativeIo;
 import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -19,7 +20,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
 import java.util.stream.Stream;
 
-//@Service
+@Service
 public class MqWriterIoLoop implements MqIoLoopable {
 
     @Autowired
@@ -31,8 +32,8 @@ public class MqWriterIoLoop implements MqIoLoopable {
     private static final ObjectMapper mapper = new ObjectMapper();
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(MqWriterIoLoop.class);
 
-    private Map<String, NativeMq> mqMap = null;
-    private Map<Integer, NativeMq> fdMap = null;
+    private Map<String, MqIo> mqMap = null;
+    private Map<Integer, MqIo> fdMap = null;
     private Map<String, Queue<MqPacket>> sendQ = null;
     private Epoll poller = null;
     private String defaultMq = null;
@@ -78,8 +79,8 @@ public class MqWriterIoLoop implements MqIoLoopable {
         // create a packet around the data
         long jobId = packetIdFactory.produceId();
         MqPacket packet = new MqPacket();
-        packet.setId(jobId);
-        packet.setData(data);
+        packet.id = jobId;
+        packet.data = data;
         // add the packet to processing queue
         Queue<MqPacket> inQueue = this.sendQ.get(mqName);
         synchronized (inQueue) { // TODO: RISHIN_A1: Used synchronised here since I dind't make the queue synchronous
@@ -96,14 +97,14 @@ public class MqWriterIoLoop implements MqIoLoopable {
     }
 
     @Override
-    public NativeMq getOrCreateMq(String mqName) throws IOException {
-        NativeMq mq = null;
+    public MqIo getOrCreateMq(String mqName) throws IOException {
+        MqIo mq = null;
         mq = this.mqMap.get(mqName);
         if (mq == null) {
-            mq = new NativeMq(mqName, NativeIo.O_RDWR);
+            mq = new MqIo(mqName, NativeIo.O_RDWR);
             this.mqMap.put(mqName, mq);
             this.fdMap.put(mq.getFd(), mq);
-            this.sendQ.put(mqName, new FixedQueue<>(new LinkedList<>(), this.batchSize)); // TODO: Synchronisation is must for the queue See RISHIN_A1 marker
+            this.sendQ.put(mqName, new FixedQueue<MqPacket>(new LinkedList<MqPacket>(), this.batchSize)); // TODO: Synchronisation is must for the queue See RISHIN_A1 marker
             this.monitorMq(mq);
             log.info(String.format("Writer started monitoring new queue, queue=%s fd=%d instance=%s", mqName, mq.getFd(), mq));
         }
@@ -111,11 +112,11 @@ public class MqWriterIoLoop implements MqIoLoopable {
     }
 
     @Override
-    public NativeMq getMq(String mqName) {
+    public MqIo getMq(String mqName) {
         return this.mqMap.get(mqName);
     }
 
-    private void monitorMq(NativeMq mq) throws IOException {
+    private void monitorMq(MqIo mq) throws IOException {
         // TODO: move this code block to single place instead of recreating every time
         EpollEvent.Flags toMonitorFlags = new EpollEvent.Flags();
         //toMonitorFlags.set(EpollEvent.Flag.EPOLLIN);
@@ -173,7 +174,7 @@ public class MqWriterIoLoop implements MqIoLoopable {
                         MqPacket packet = this.sendQ.get(this.defaultMq).poll();
                         if (packet != null) {
                             byte[] data = mapper.writeValueAsBytes(packet);
-                            mqMap.get(this.defaultMq).send(data, NativeMq.MSG_PRIORITY_DEFAULT);
+                            mqMap.get(this.defaultMq).send(data, MqIo.MSG_PRIORITY_DEFAULT);
                         } else {
                             // no pending jobs, nothing to do
                         }

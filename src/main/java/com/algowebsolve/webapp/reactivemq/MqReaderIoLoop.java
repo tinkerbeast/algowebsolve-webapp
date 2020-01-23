@@ -1,6 +1,7 @@
 package com.algowebsolve.webapp.reactivemq;
 
-import com.algowebsolve.webapp.NativeIo;
+import com.algowebsolve.webapp.nsystem.linux.NativeIo;
+import com.algowebsolve.webapp.nsystem.linux.MqIo;
 import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -20,7 +21,7 @@ import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
-//@Service
+@Service
 public class MqReaderIoLoop implements MqIoLoopable {
 
     @Autowired
@@ -29,8 +30,8 @@ public class MqReaderIoLoop implements MqIoLoopable {
     private static final ObjectMapper mapper = new ObjectMapper();
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(MqReaderIoLoop.class);
 
-    private Map<String, NativeMq> mqMap = null;
-    private Map<Integer, NativeMq> fdMap = null;
+    private Map<String, MqIo> mqMap = null;
+    private Map<Integer, MqIo> fdMap = null;
     private Map<Long, byte[]> recvQ = null;
     private Epoll poller = null;
     private String defaultMq = null;
@@ -51,7 +52,7 @@ public class MqReaderIoLoop implements MqIoLoopable {
         this.stock = stock;
         this.mqMap = new ConcurrentHashMap<>();
         this.fdMap = new ConcurrentHashMap<>();
-        this.recvQ = Collections.synchronizedMap(new FixedMap<>(new TreeMap<>(), this.stock));
+        this.recvQ = Collections.synchronizedMap(new FixedMap<Long, byte[]>(new TreeMap<Long, byte[]>(), this.stock));
         this.poller = new Epoll();
 
         this.defaultMq = defaultMq;
@@ -80,11 +81,11 @@ public class MqReaderIoLoop implements MqIoLoopable {
     }
 
     @Override
-    public NativeMq getOrCreateMq(String mqName) throws IOException {
-        NativeMq mq = null;
+    public MqIo getOrCreateMq(String mqName) throws IOException {
+        MqIo mq = null;
         mq = this.mqMap.get(mqName);
         if (mq == null) {
-            mq = new NativeMq(mqName, NativeIo.O_RDWR);
+            mq = new MqIo(mqName, NativeIo.O_RDWR);
             this.mqMap.put(mqName, mq);
             this.fdMap.put(mq.getFd(), mq);
             this.monitorMq(mq);
@@ -94,11 +95,11 @@ public class MqReaderIoLoop implements MqIoLoopable {
     }
 
     @Override
-    public NativeMq getMq(String mqName) {
+    public MqIo getMq(String mqName) {
         return this.mqMap.get(mqName);
     }
 
-    private void monitorMq(NativeMq mq) throws IOException {
+    private void monitorMq(MqIo mq) throws IOException {
         // TODO: move this code block to single place instead of recreating every time
         EpollEvent.Flags toMonitorFlags = new EpollEvent.Flags();
         toMonitorFlags.set(EpollEvent.Flag.EPOLLIN);

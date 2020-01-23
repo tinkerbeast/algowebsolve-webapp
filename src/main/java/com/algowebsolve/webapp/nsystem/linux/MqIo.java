@@ -1,12 +1,13 @@
-package com.algowebsolve.webapp.reactivemq;
+package com.algowebsolve.webapp.nsystem.linux;
 
+import com.algowebsolve.webapp.nsystem.PacketIoInterface;
 import com.sun.jna.Native;
 import com.sun.jna.Pointer;
 import com.sun.jna.Memory;
 
 import java.io.IOException;
 
-public class NativeMq implements AutoCloseable {
+public class MqIo implements PacketIoInterface {
 
     static {
         Native.register( "/lib/x86_64-linux-gnu/librt.so.1" ); // TODO: This is VERY VERY BAD
@@ -32,7 +33,7 @@ public class NativeMq implements AutoCloseable {
     private Pointer sendBuffer = Pointer.NULL;
     private Pointer recvBuffer = Pointer.NULL;
 
-    public NativeMq(String queueName, int flags) throws IOException {
+    public MqIo(String queueName, int flags) throws IOException {
         // allocate memory for recv prio
         queueName = "/" + queueName;
         this.recvPrio = new Memory(16); // TODO: 16 bytes is arbitrarily taken, ideally should be sizeof(native int)
@@ -93,7 +94,18 @@ public class NativeMq implements AutoCloseable {
         }
     }
 
-    int getFd() {
+    @Override
+    public int getFd() {
         return this.mqdes;
+    }
+
+    @Override
+    public byte[] read() throws IOException {
+        return recv();
+    }
+
+    @Override
+    public void write(byte[] data) throws IOException {
+        send(data, MSG_PRIORITY_DEFAULT);
     }
 }

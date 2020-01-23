@@ -1,4 +1,4 @@
-package com.algowebsolve.webapp;
+package com.algowebsolve.webapp.nsystem.linux;
 
 import java.io.IOException;
 
@@ -38,7 +38,7 @@ public class NativeIo implements AutoCloseable {
         }
     }
 
-    String read() throws IOException {
+    public String read() throws IOException {
         Pointer mem = new Memory(1024);
         long ret = read(this.fd, mem, 1023);
         if (ret > 0) {

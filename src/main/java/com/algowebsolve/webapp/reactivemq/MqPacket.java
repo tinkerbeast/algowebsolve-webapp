@@ -6,8 +6,8 @@ import java.util.concurrent.atomic.AtomicLong;
 
 @Data
 public class MqPacket {
-    long id;
-    byte[] data;
+    public long id;
+    public byte[] data;
 }
 
 class MqJobIdFactory {
