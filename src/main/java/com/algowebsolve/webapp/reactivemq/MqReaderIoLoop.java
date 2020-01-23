@@ -80,6 +80,10 @@ public class MqReaderIoLoop implements MqIoLoopable {
         return this.recvQ.remove(id);
     }
 
+    public boolean isDone(long id) {
+        return this.recvQ.get(id) != null;
+    }
+
     @Override
     public MqIo getOrCreateMq(String mqName) throws IOException {
         MqIo mq = null;
