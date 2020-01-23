@@ -15,10 +15,10 @@ import java.time.Duration;
 @Service
 public class MqJobService {
     @Autowired
-    private static MqReaderIoLoop mqReader;
+    private MqReaderIoLoop mqReader;
 
     @Autowired
-    private static MqWriterIoLoop mqWriter;
+    private MqWriterIoLoop mqWriter;
 
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(MqJobService.class);
 
@@ -26,18 +26,18 @@ public class MqJobService {
 
     public long startJob(byte[] data) {
 
-        //return mqWriter.postJob("rishin_out", data);
-        singleJob = data;
-        return  -1;
+        return mqWriter.postJob("rishin_out", data);
+        //singleJob = data;
+        //return  -1;
     }
 
     public boolean isDone(long jobId) {
-        //return mqReader.isDone(jobId);
-        return true;
+        return mqReader.isDone(jobId);
+        //return true;
     }
 
     public byte[] getResult(long jobId) {
-        //return mqReader.getJob(jobId);
-        return singleJob;
+        return mqReader.getJob(jobId);
+        //return singleJob;
     }
 }
