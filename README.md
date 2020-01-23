@@ -22,7 +22,7 @@ See the tools in algowebsolve-processor project.
 
 
 ```
-./mqreader -q /rishin_out | tee  /dev/pts/2 | ./mqwriter -q /rishin_in
+./mqreader -q /rishin_out | ./pipedelay -d 900 | tee /dev/pts/1 | ./mqwriter -q /rishin_in
 
 ```
 
@@ -30,7 +30,10 @@ See the tools in algowebsolve-processor project.
 
 ```
 mvn spring-boot:run
-curl -X PUT -H "Content-Type: application/json"  -d '{"type":"dynamic-backpack1d","details":{"maxweight":1}}'
+curl -X PUT \
+    -H "Content-Type: application/json" \
+    -d '{"type":"dynamic-backpack1d","details":{"maxweight":1}}' \
+    http://localhost:8080/v1/problems
 ```
 
 
