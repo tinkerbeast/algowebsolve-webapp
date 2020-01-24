@@ -4,6 +4,7 @@ import com.algowebsolve.webapp.MqJobService;
 import com.algowebsolve.webapp.model.BackpackProblem;
 import com.algowebsolve.webapp.model.BackpackSolution;
 import com.algowebsolve.webapp.model.ProblemRequest;
+import com.algowebsolve.webapp.reactivemq.SimpleMqIoLoop;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -39,7 +40,7 @@ public class Problems {
     private static final long RETRY_INTERVAL_MS = 500;
 
     @Autowired
-    MqJobService jobService;
+    SimpleMqIoLoop jobService;
 
 
     // DEVNOTE: Why use PUT?
@@ -64,10 +65,14 @@ public class Problems {
             if (modelType == null || dstModelType == null) {
                 return Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST, "Problem type is invalid"));
             }
-            Object model = jsonMapper.treeToValue(problemRequest.details, modelType.getRawClass());
-            data = jsonMapper.writeValueAsBytes(model);
+            Object model = jsonMapper.treeToValue(problemRequest.details, modelType.getRawClass()); // TODO: There has to be a better way to validate
             // start job
-            jobId = jobService.startJob(data);
+            jobId = jobService.addJob(problemRequest);
+            if (jobId == -1L) {
+                String errStr = "Problem input queue is overloaded";
+                log.error(errStr);
+                return Mono.error(new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, errStr));
+            }
         } catch (JsonParseException | JsonProcessingException e) {
             return Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST, "Json format was invalid"));
         } catch (Exception e) { // TODO: What is the preferred way to handle general exceptions?
@@ -89,11 +94,10 @@ public class Problems {
                 })
                 .map(retryCount -> {
                     try {
-                        byte[] resultData = jobService.getResult(jobId);
-                        Object dstModel = jsonMapper.readValue(resultData, dstModelType);
-                        JsonNode node = jsonMapper.valueToTree(dstModel);
-                        return node;
-                    } catch (JsonParseException | IOException e) {
+                        ProblemRequest resultData = jobService.getResult(jobId);
+                        Object dstModel = jsonMapper.treeToValue(resultData.details, dstModelType.getRawClass()); // TODO: There has to be a non exception throwing way of validating the result
+                        return resultData.details;
+                    } catch (JsonParseException | JsonProcessingException e) {
                         String errStr = "Failed to parse job results";
                         log.error(errStr, e);
                         throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, errStr);

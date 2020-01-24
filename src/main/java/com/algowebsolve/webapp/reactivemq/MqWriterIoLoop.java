@@ -20,7 +20,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
 import java.util.stream.Stream;
 
-@Service
+//@Service
 public class MqWriterIoLoop implements MqIoLoopable {
 
     @Autowired
