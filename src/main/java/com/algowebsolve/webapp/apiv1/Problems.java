@@ -1,6 +1,5 @@
 package com.algowebsolve.webapp.apiv1;
 
-import com.algowebsolve.webapp.MqJobService;
 import com.algowebsolve.webapp.model.BackpackProblem;
 import com.algowebsolve.webapp.model.BackpackSolution;
 import com.algowebsolve.webapp.model.ProblemRequest;
