@@ -18,7 +18,9 @@ import reactor.core.publisher.Mono;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -34,12 +36,21 @@ public class Problems {
         dstModelMap.put("dynamic-backpack1d", jsonMapper.getTypeFactory().constructType(BackpackSolution.class));
     }
 
-    private static final String API_PROBLEMS = "/v1/problems";
+    private static final String API_PROBLEMS = "/v1/problems"; // TODO: make this into /v1/problem/{problemType}
     private static final long TIMEOUT_DEFAULT_MS = 1000;
     private static final long RETRY_INTERVAL_MS = 500;
 
     @Autowired
     SimpleMqIoLoop jobService;
+
+
+    public static List<JavaType> getModels() {
+        int count = srcModelMap.size() + dstModelMap.size();
+        List<JavaType> list = new ArrayList<>(count);
+        list.addAll(srcModelMap.values());
+        list.addAll(dstModelMap.values());
+        return list;
+    }
 
 
     // DEVNOTE: Why use PUT?
