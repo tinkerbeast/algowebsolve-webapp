@@ -1,11 +1,11 @@
 package com.algowebsolve.webapp.reactivemq;
 
-import com.algowebsolve.webapp.model.ProblemRequest;
 import com.algowebsolve.webapp.nsystem.PacketIoInterface;
 import com.algowebsolve.webapp.nsystem.linux.MqIo;
 import com.algowebsolve.webapp.nsystem.linux.NativeIo;
 import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
@@ -15,7 +15,6 @@ import org.springframework.stereotype.Service;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.Map;
-import java.util.Queue;
 import java.util.TreeMap;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -31,7 +30,8 @@ public class SimpleMqIoLoop {
 
     private static class MqPacket {
         public long id;
-        public ProblemRequest data;
+        public String urn;
+        public JsonNode data;
     }
 
     // service parameters
@@ -44,21 +44,22 @@ public class SimpleMqIoLoop {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(MqWriterIoLoop.class);
     // members
     private BlockingQueue<MqPacket> sendingQ;
-    private Map<Long, ProblemRequest> receivingSet;
+    private Map<Long, JsonNode> receivingSet;
     private PacketIoInterface sendingMq;
     private PacketIoInterface receiverMq;
 
     SimpleMqIoLoop() throws IOException {
         sendingQ = new ArrayBlockingQueue<>(SENDER_PENDING_LIMIT);
-        receivingSet = Collections.synchronizedMap(new FixedMap<Long, ProblemRequest>(new TreeMap<Long, ProblemRequest>(), RECEIVER_PENDING_LIMIT));
+        receivingSet = Collections.synchronizedMap(new FixedMap<Long, JsonNode>(new TreeMap<Long, JsonNode>(), RECEIVER_PENDING_LIMIT));
         sendingMq = new MqIo(SENDER_QNAME, NativeIo.O_WRONLY);
         receiverMq = new MqIo(RECEIVER_QNAME, NativeIo.O_RDONLY);
     }
 
-    public long addJob(ProblemRequest data) {
+    public long addJob(String urn, JsonNode data) {
         long id = packetIdFactory.produceId();
         MqPacket packet = new MqPacket();
         packet.id = id;
+        packet.urn = urn;
         packet.data = data;
         boolean accepted = sendingQ.offer(packet);
         return accepted? id: -1L;
@@ -68,7 +69,7 @@ public class SimpleMqIoLoop {
         return receivingSet.get(jobId) != null;
     }
 
-    public ProblemRequest getResult(long jobId) {
+    public JsonNode getResult(long jobId) {
         return receivingSet.remove(jobId);
     }
 
