@@ -1,8 +1,6 @@
 package com.algowebsolve.webapp.apiv1;
 
-import com.algowebsolve.webapp.model.BackpackProblem;
-import com.algowebsolve.webapp.model.BackpackSolution;
-import com.algowebsolve.webapp.model.TestPrimitives;
+import com.algowebsolve.webapp.model.*;
 import com.algowebsolve.webapp.reactivemq.SimpleMqIoLoop;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JavaType;
@@ -44,26 +42,37 @@ public class Problems {
     SimpleMqIoLoop jobService;
 
     @Bean
-    void problemsInit() throws JsonMappingException {
+    public void problemsInit() throws JsonMappingException {
         JavaType _temp;
 
         _temp = jsonMapper.getTypeFactory().constructType(TestPrimitives.class);
         typeToUrn.put(_temp, jsonSchemaGen.generateSchema(_temp).getId());
         srcModelMap.put("test-echo-primitives", _temp);
         dstModelMap.put("test-echo-primitives", _temp);
+
+        _temp = jsonMapper.getTypeFactory().constructType(TestObjects.class);
+        typeToUrn.put(_temp, jsonSchemaGen.generateSchema(_temp).getId());
+        srcModelMap.put("test-echo-objects", _temp);
+        dstModelMap.put("test-echo-objects", _temp);
+
+        _temp = jsonMapper.getTypeFactory().constructType(TestPrimitiveArrays.class);
+        typeToUrn.put(_temp, jsonSchemaGen.generateSchema(_temp).getId());
+        srcModelMap.put("test-echo-primitivearrays", _temp);
+        dstModelMap.put("test-echo-primitivearrays", _temp);
+
+        _temp = jsonMapper.getTypeFactory().constructType(TestObjectArrays.class);
+        typeToUrn.put(_temp, jsonSchemaGen.generateSchema(_temp).getId());
+        srcModelMap.put("test-echo-obectarrays", _temp);
+        dstModelMap.put("test-echo-obectarrays", _temp);
     }
 
 
-    public static List<JavaType> getModels() {
-        /*
+    public List<JavaType> getModels() {
         int count = srcModelMap.size() + dstModelMap.size();
         List<JavaType> list = new ArrayList<>(count);
         list.addAll(srcModelMap.values());
         list.addAll(dstModelMap.values());
         return list;
-
-         */
-        return  null;
     }
 
 
