@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.module.jsonSchema.JsonSchema;
 import com.fasterxml.jackson.module.jsonSchema.JsonSchemaGenerator;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -18,6 +19,7 @@ import java.util.List;
 public class ModelGenrator implements CommandLineRunner {
 
     private static final ObjectMapper jsonMapper = new ObjectMapper();
+
 
     public static void main(String[] args) {
         SpringApplication.run(ModelGenrator.class, args);
@@ -35,7 +37,10 @@ public class ModelGenrator implements CommandLineRunner {
         }
         System.out.println("<<args");
 
-        List<JavaType> models = Problems.getModels();
+        Problems problemsApi = new Problems();
+        problemsApi.problemsInit();
+
+        List<JavaType> models = problemsApi.getModels();
         JsonSchemaGenerator schemaGen = new JsonSchemaGenerator(jsonMapper);
         for(JavaType type: models) {
             String canonicalName = type.getRawClass().getCanonicalName();
