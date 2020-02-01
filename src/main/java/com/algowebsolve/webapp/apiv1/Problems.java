@@ -36,7 +36,7 @@ public class Problems {
 
     private Map<String, JavaType> srcModelMap = new HashMap<>();
     private Map<String, JavaType> dstModelMap = new HashMap<>();
-    private Map<JavaType, String> typeToUrn = new HashMap<>();
+    private Map<String, String> typeToUrn = new HashMap<>();
 
     @Autowired
     SimpleMqIoLoop jobService;
@@ -46,22 +46,22 @@ public class Problems {
         JavaType _temp;
 
         _temp = jsonMapper.getTypeFactory().constructType(TestPrimitives.class);
-        typeToUrn.put(_temp, jsonSchemaGen.generateSchema(_temp).getId());
+        typeToUrn.put("test-echo-primitives", jsonSchemaGen.generateSchema(_temp).getId());
         srcModelMap.put("test-echo-primitives", _temp);
         dstModelMap.put("test-echo-primitives", _temp);
 
         _temp = jsonMapper.getTypeFactory().constructType(TestObjects.class);
-        typeToUrn.put(_temp, jsonSchemaGen.generateSchema(_temp).getId());
+        typeToUrn.put("test-echo-objects", jsonSchemaGen.generateSchema(_temp).getId());
         srcModelMap.put("test-echo-objects", _temp);
         dstModelMap.put("test-echo-objects", _temp);
 
         _temp = jsonMapper.getTypeFactory().constructType(TestPrimitiveArrays.class);
-        typeToUrn.put(_temp, jsonSchemaGen.generateSchema(_temp).getId());
+        typeToUrn.put("test-echo-primitivearrays", jsonSchemaGen.generateSchema(_temp).getId());
         srcModelMap.put("test-echo-primitivearrays", _temp);
         dstModelMap.put("test-echo-primitivearrays", _temp);
 
         _temp = jsonMapper.getTypeFactory().constructType(TestObjectArrays.class);
-        typeToUrn.put(_temp, jsonSchemaGen.generateSchema(_temp).getId());
+        typeToUrn.put("test-echo-obectarrays", jsonSchemaGen.generateSchema(_temp).getId());
         srcModelMap.put("test-echo-obectarrays", _temp);
         dstModelMap.put("test-echo-obectarrays", _temp);
     }
